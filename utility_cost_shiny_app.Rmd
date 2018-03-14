@@ -1,0 +1,119 @@
+---
+title: "Utility in ROC Space"
+author: "Bob Horton & Siddarth Ramesh, Microsoft AI&R Data Group"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r eruptions, echo=FALSE}
+
+library(shiny)
+
+ui <- shinyUI(fluidPage(
+
+  titlePanel("Costs and Benefits"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+      selectInput("num_widgets", label = "Number of widgets:",
+                  choices = c(10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000), selected = 100),
+    
+      sliderInput("P_POS", label = "proportion positive:",
+                  min = 0.0, max = 1.0, value = 0.95, step = 0.01),
+    
+      sliderInput("TP_value", label = "true positive coefficient:",
+                  min = 1, max = 1000, value = 20, step = 1),
+    
+      sliderInput("TN_value", label = "true negative coefficient:",
+                  min = -300, max = 0, value = -50, step = 1),
+    
+      sliderInput("FP_value", label = "false positive coefficient:",
+                  min = -1000, max = 0, value = -300, step = 1),
+    
+      sliderInput("FN_value", label = "false negative coefficient:",
+                  min = -300, max = 0, value = -50, step = 1),
+      
+      sliderInput("b1", label="true positive exponent",
+                  min=-3.0, max=3.0, value=1.0, step=0.1),
+      
+      sliderInput("b2", label="true negative exponent",
+                  min=-3.0, max=3.0, value=1.0, step=0.1),
+      
+      sliderInput("b3", label="false positive exponent",
+                  min=-3.0, max=3.0, value=1.0, step=0.1),
+      
+      sliderInput("b4", label="false negative exponent",
+                  min=-3.0, max=3.0, value=1.0, step=0.1)
+    ),
+
+    mainPanel(
+      plotOutput("rocPlot")
+    )
+  )
+))
+
+# input <- list(num_widgets=100, P_POS=0.95, TP_value=20, TN_value=-50, FP_value=-300, FN_value=-50, b1=0.5, b2=1, b3=1, b4=1)
+
+server <- function(input, output) {
+
+  output$rocPlot <- renderPlot({
+    GREEN_LINES <- FALSE
+    n_colors <- 16  # as.numeric(input$n_contour_levels)
+    P_POS <- input$P_POS
+    
+    N <- as.numeric(input$num_widgets)
+    
+    TP_value <- input$TP_value     # sold
+    TN_value <- input$TN_value     # trashed
+    FN_value <- input$FN_value     # wasted
+    FP_value <- input$FP_value     # refunded
+    
+    b1 <- as.numeric(input$b1)
+    b2 <- as.numeric(input$b2)
+    b3 <- as.numeric(input$b3)
+    b4 <- as.numeric(input$b4)
+    
+    FPR <- TPR <- seq(0, 1, length=301)
+    
+    plot_matrix <- function(fpr, tpr, M, ...){
+      image(fpr, tpr, M, xlab="FPR", ylab="TPR", col=heat.colors(n_colors), ...)
+      contour(fpr, tpr, M, nlevels=10, add=TRUE)
+    }
+    
+    utility <- function(fpr, tpr, P, N){
+      TP_value * (tpr * P * N)^b1 +            # sold
+      TN_value * ((1 - fpr) * (1 - P) * N)^b2 +# trashed
+      FN_value * ((1 - tpr) * P * N)^b3 +      # wasted
+      FP_value * (fpr * (1 - P) * N)^b4        # refunded
+    }
+    
+    s <- function(P){
+      # slope of indifference curve
+      (1 - P)*(TN_value - FP_value) / (P * (TP_value - FN_value))
+    }
+    
+    cost_matrix <- outer(FPR, TPR, utility, P_POS, N)
+    
+    plot_matrix(FPR, TPR, cost_matrix, sub=sprintf("P=%0.3f, N=%d, utility range=%0.2f to %0.2f", 
+                                                   P_POS, N, min(cost_matrix), max(cost_matrix)))
+    if (GREEN_LINES){
+      abline(1 - s(P_POS), s(P_POS), lwd=2, lty=2, col="green")  # line of indifference for cost_matrix[nrow(cost_matrix), ncol(cost_matrix)]
+      abline(0, s(P_POS), lwd=2, lty=2, col="green")  # line of indifference for cost_matrix[0,0]
+    }
+    abline(0, 1, lty=3, lwd=2, col="gray")
+  
+  }, width=600, height=600)
+}
+
+options <- list(width = 1000, height = 1000)
+
+shinyApp(ui, server,  options=options)
+
+```
+
