@@ -1,6 +1,6 @@
 # Utility Function in ROC Space
 
-This is a shiny app to explore how utility functions can be used together with an ROC curve to find the decision threshold that maximizes net profit (or, more generally, utility). It was inspored by the blog post "[Machine Learning meets Economics](http://blog.mldb.ai/blog/posts/2016/01/ml-meets-economics/}" by Nicolas Kruchten.
+This is a shiny app to explore how utility functions can be used together with an ROC curve to find the decision threshold that maximizes net profit (or, more generally, utility). It was largely inspired by the blog post "[Machine Learning meets Economics](http://blog.mldb.ai/blog/posts/2016/01/ml-meets-economics/}" by Nicolas Kruchten.
 
 
 # Contributing
