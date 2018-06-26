@@ -14,6 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(shiny)
 
+ROC_OBJ <- readRDS("reference_roc.Rds")
+
 ui <- shinyUI(fluidPage(
 
   titlePanel("Costs and Benefits"),
@@ -83,6 +85,17 @@ server <- function(input, output) {
     abline(1 - s(P_POS), s(P_POS), lwd=2, lty=2, col="green")  # line of indifference for cost_matrix[nrow(cost_matrix), ncol(cost_matrix)]
     abline(0, s(P_POS), lwd=2, lty=2, col="green")  # line of indifference for cost_matrix[0,0]
     abline(0, 1, lty=3, lwd=2, col="gray")
+    
+    with(ROC_OBJ, {
+      fpr <- (1 - specificities)
+      tpr <- sensitivities
+      lines(fpr, tpr, col="blue", lwd=2)
+      utilities <- utility(fpr, tpr, P_POS)
+      max_point <- which.max(utilities)
+      points(fpr[max_point], tpr[max_point], fill="green", col="darkgreen", pch=20, cex=4)
+      mtext(sprintf("Utility = %0.3f", utilities[max_point]), side=3, line=0)
+    })
+
   
   }, width=600, height=600)
 }
