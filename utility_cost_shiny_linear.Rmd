@@ -23,23 +23,23 @@ ui <- shinyUI(fluidPage(
   sidebarLayout(
 
     sidebarPanel(
-      selectInput("n_contour_levels", label = "Number of contour lines:",
-                  choices = c(0, 10, 20), selected = 10),
+      selectInput("num_widgets", label = "Number of units:",
+                  choices = c(10, 100, 1000, 10000), selected = 100),
     
       sliderInput("P_POS", label = "proportion positive:",
                   min = 0.0, max = 1.0, value = 0.95, step = 0.01),
     
       sliderInput("TP_value", label = "value of true positive:",
-                  min = 1, max = 300, value = 20, step = 1),
-    
-      sliderInput("TN_value", label = "value of true negative:",
-                  min = -300, max = 0, value = -50, step = 1),
+                  min = -100, max = 100, value = 50, step = 1),
     
       sliderInput("FP_value", label = "value of false positive:",
-                  min = -1000, max = 0, value = -300, step = 10),
+                  min = -100, max = 100, value = -70, step = 1),
+    
+      sliderInput("TN_value", label = "value of true negative:",
+                  min = -100, max = 100, value = -10, step = 1),
     
       sliderInput("FN_value", label = "value of false negative:",
-                  min = -300, max = 0, value = -50, step = 1)
+                  min = -100, max = 100, value = -10, step = 1)
     ),
 
     mainPanel(
@@ -53,12 +53,13 @@ ui <- shinyUI(fluidPage(
 server <- function(input, output) {
 
   output$rocPlot <- renderPlot({
-    n_countour_levels <- as.numeric(input$n_contour_levels)
+    n_countour_levels <- 16
     P_POS <- input$P_POS
+    N <- as.numeric(input$num_widgets)
     TP_value <- input$TP_value     # sold
+    FP_value <- input$FP_value     # refunded
     TN_value <- input$TN_value     # trashed
     FN_value <- input$FN_value     # wasted
-    FP_value <- input$FP_value     # refunded
     
     FPR <- TPR <- seq(0, 1, length=301)
     
@@ -67,11 +68,11 @@ server <- function(input, output) {
       contour(fpr, tpr, M, nlevels=n_countour_levels, add=TRUE)
     }
     
-    utility <- function(fpr, tpr, P){
-      (TP_value * tpr * P) +            # sold
-      (FN_value * (1 - tpr) * P) +      # wasted
-      (FP_value * fpr * (1 - P)) +      # refunded
-      (TN_value * (1 - fpr) * (1 - P))  # trashed
+    utility <- function(fpr, tpr, P, N){
+      (N * TP_value * tpr * P) +             # sold
+      (N * FP_value * fpr * (1 - P)) +       # refunded
+      (N * TN_value * (1 - fpr) * (1 - P)) + # trashed
+      (N * FN_value * (1 - tpr) * P)         # wasted
     }
     
     s <- function(P){
@@ -79,21 +80,36 @@ server <- function(input, output) {
       (1 - P)*(TN_value - FP_value) / (P * (TP_value - FN_value))
     }
     
-    cost_matrix <- outer(FPR, TPR, utility, P_POS)
+    cost_matrix <- outer(FPR, TPR, utility, P_POS, N)
     
-    plot_matrix(FPR, TPR, cost_matrix, sub=sprintf("P=%0.3f", P_POS))
-    abline(1 - s(P_POS), s(P_POS), lwd=2, lty=2, col="green")  # line of indifference for cost_matrix[nrow(cost_matrix), ncol(cost_matrix)]
-    abline(0, s(P_POS), lwd=2, lty=2, col="green")  # line of indifference for cost_matrix[0,0]
-    abline(0, 1, lty=3, lwd=2, col="gray")
+    safe_abline <- function(a, b, col, lwd=3, lty="5A"){
+      # draws dashed line of contrasting colors; handles infinite slope
+      contrast_col <- paste0("dark", gsub("light", "", col))
+      if (is.infinite(b)){
+        abline(v=a, lwd=lwd, lty=1, col=contrast_col)
+        abline(v=a, lwd=lwd, lty=lty, col=col)
+      } else{
+        abline(a, b, lwd=lwd, lty=1, col=contrast_col)
+        abline(a, b, lwd=lwd, lty=lty, col=col)
+      }
+    }
+    imar <- 0.02 # inner margin fudge, so highest payoff point doesn't get chopped off at the edge
+    plot_matrix(FPR, TPR, cost_matrix, # sub=sprintf("P=%0.2f", P_POS), 
+                xlim=c(-imar, 1 + imar), ylim=c(-imar, 1 + imar))
+    
+    safe_abline(1 - s(P_POS), s(P_POS), col="green")  # line of indifference for cost_matrix[nrow(cost_matrix), ncol(cost_matrix)]
+    safe_abline(0, s(P_POS), col="green")  # line of indifference for cost_matrix[0,0]
+    safe_abline(0, 1, col="lightblue")
     
     with(ROC_OBJ, {
       fpr <- (1 - specificities)
       tpr <- sensitivities
       lines(fpr, tpr, col="blue", lwd=2)
-      utilities <- utility(fpr, tpr, P_POS)
+      utilities <- utility(fpr, tpr, P_POS, N)
       max_point <- which.max(utilities)
-      points(fpr[max_point], tpr[max_point], fill="green", col="darkgreen", pch=20, cex=4)
-      mtext(sprintf("Utility = %0.3f", utilities[max_point]), side=3, line=0)
+      points(fpr[max_point], tpr[max_point], bg="darkgreen", col="green", pch=21, cex=3)
+      mtext(sprintf("payoff = %0.2f", utilities[max_point]), side=3, line=2.5, cex=1.5)
+      mtext(sprintf("FPR = %0.2f, TPR = %0.2f", fpr[max_point], tpr[max_point]), side=3, line=1)
     })
 
   
