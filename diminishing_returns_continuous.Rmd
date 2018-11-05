@@ -1,0 +1,83 @@
+---
+title: "Diminishing Returns"
+author: "Bob Horton"
+date: "October 15, 2018"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Less is More (per unit)
+
+Here we use an equation to estimate the price for each unit, in a diminishing returns situation where the total market is finite. Specifically, we model the returns (revenue) as a parameterized function of the number of units sold (x).
+
+$$
+x_{equiv} = \begin{cases}
+ x & \text{if } K = 0 \\
+ \frac{(1 - e^{-K x})}{K} & \text{otherwise}
+\end{cases}
+$$
+
+where the parameter K controls how quickly the market is saturated.
+
+```{r diminishing_returns, echo=FALSE}
+
+ui <- shinyUI(fluidPage(
+
+  titlePanel("Diminishing Returns"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+      selectInput("num_widgets", label = "Number of units:",
+                  choices = c(10, 100, 1000, 10000), selected = 100),
+      sliderInput("K", label = "diminishment rate (K):", min = -0.1, max = 0.1, value = 0.001, step = 0.001)
+    ),
+
+    mainPanel(
+      plotOutput("rocPlot")
+    )
+  )
+))
+
+diminishing_return <- function(x, K){
+  if (K==0)
+    x
+  else
+    (1 - exp(-K*x))/K
+}
+
+# input <- list(num_widgets=100, A=100, K=0.001)
+
+server <- function(input, output) {
+
+  output$rocPlot <- renderPlot({
+
+    num_widgets <- as.numeric(input$num_widgets)
+    K <- as.numeric(input$K)  # rate at which price declines with increasing supply
+    
+    units_sold <- seq(1, num_widgets)  # seq(0, num_widgets)
+    
+    dret <- diminishing_return(units_sold, K)
+    
+    plot(units_sold, dret, type='b', 
+         # xlim=c(0, num_widgets), ylim=c(0, num_widgets),
+         xlab="units sold", ylab="cumulative revenue",
+         main="Total revenue")
+
+    abline(0, 1, lty=2, col="blue")
+
+  }, width=600, height=600)
+}
+
+options <- list(width = 600, height = 1200)
+
+shinyApp(ui, server,  options=options)
+
+```
+
+
+The blue line shows non-diminishing returns, where each unit sold adds a constant amount to revenue. The parameter `K` controls how quickly the returns diminish, and also the asymptotic ceiling for returns. Positive values of `K` lead to more rapid falloff in returns, so the black curve begins to droop below the blue reference line. Positive values of `K` cause the black curve to lift above the blue reference curve. When `K == 0` we have constant unit revenue (the equation is not defined at K==0, so we add a special case.)

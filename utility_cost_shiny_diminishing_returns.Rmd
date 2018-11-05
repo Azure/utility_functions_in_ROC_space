@@ -1,0 +1,157 @@
+---
+title: "Utility in ROC Space"
+author: "Bob Horton & Siddarth Ramesh, Enterprise Knowledge Graph Team"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r utility_app, echo=FALSE}
+
+library(shiny)
+
+REFERENCE_ROC_FILE <- "reference_roc.Rds"
+
+if (file.exists(REFERENCE_ROC_FILE)){
+  ROC_OBJ <- readRDS("reference_roc.Rds")
+} else {
+  p <- seq(0, 1, length=300)
+  ROC_OBJ <- list(
+    p = p,
+    # sensitivities = pnorm(p, mean=0.25, sd=0.1), # mean=0.45, sd=0.09
+    # specificities = (1 - pnorm(p, mean=0.55, sd=0.2))
+    sensitivities = pnorm(p, mean=0.45, sd=0.1), # mean=0.45, sd=0.09
+    specificities = (1 - pnorm(p, mean=0.54, sd=0.1))
+  )
+}
+
+ui <- shinyUI(fluidPage(
+
+  sidebarLayout(
+
+    sidebarPanel(
+      
+      headerPanel("Costs and Benefits"),
+
+      selectInput("num_widgets", label = "Number of units:",
+                  choices = c(10, 100, 1000, 10000), selected = 100),
+    
+      sliderInput("P_POS", label = "proportion positive:",
+                  min = 0.0, max = 1.0, value = 0.95, step = 0.01),
+    
+      sliderInput("TP_value", label = "value of true positive:",
+                  min = -100, max = 100, value = 50, step = 1),
+    
+      sliderInput("FP_value", label = "value of false positive:",
+                  min = -100, max = 100, value = -70, step = 1),
+    
+      sliderInput("TN_value", label = "value of true negative:",
+                  min = -100, max = 100, value = -10, step = 1),
+    
+      sliderInput("FN_value", label = "value of false negative:",
+                  min = -100, max = 100, value = -10, step = 1),
+
+      sliderInput("K", label = "diminishment rate:", 
+                  min = -0.05, max = 0.5, value = 0, step = 0.001)
+
+    ),
+
+    mainPanel(
+      headerPanel("Highest payout on ROC curve"),
+
+      plotOutput("rocPlot")
+    )
+  )
+))
+
+diminishing_return <- function(x, K){
+  if (K==0)
+    x
+  else
+    (1 - exp(-K*x))/K
+}
+# input <- list(num_widgets=100, A=10, K=0.1, P_POS=0.95, TP_value=20, TN_value=-50, FP_value=-300, FN_value=-50)
+
+server <- function(input, output) {
+
+  output$rocPlot <- renderPlot({
+    n_countour_levels <- 16
+    P_POS <- input$P_POS
+    N <- as.numeric(input$num_widgets)
+    K <- as.numeric(input$K)
+    TP_value <- input$TP_value     # sold
+    FP_value <- input$FP_value     # refunded
+    TN_value <- input$TN_value     # trashed
+    FN_value <- input$FN_value     # wasted
+    
+    FPR <- TPR <- seq(0, 1, length=301)
+    
+    plot_matrix <- function(fpr, tpr, M, ...){
+      image(M, xlab="FPR", ylab="TPR", col=heat.colors(256), ...)
+      contour(fpr, tpr, M, nlevels=n_countour_levels, add=TRUE)
+    }
+    
+    utility <- function(fpr, tpr, P, N){
+      # profit units
+      TP <- N * tpr * P
+      equiv_TP <- diminishing_return(TP, K)
+      (TP_value * equiv_TP) +                # TP: sold
+      (FP_value * N * fpr * (1 - P)) +       # FP: refunded
+      (TN_value * N * (1 - fpr) * (1 - P)) + # TN: trashed
+      (FN_value * N * (1 - tpr) * P)         # FN: wasted
+    }
+    
+    s <- function(P){
+      # slope of indifference curve
+      (1 - P)*(TN_value - FP_value) / (P * (TP_value - FN_value))
+    }
+    
+    cost_matrix <- outer(FPR, TPR, utility, P_POS, N)
+    
+    safe_abline <- function(a, b, col, lwd=3, lty="5A"){
+      # draws dashed line of contrasting colors; handles infinite slope
+      contrast_col <- paste0("dark", gsub("light", "", col))
+      if (is.infinite(b)){
+        abline(v=a, lwd=lwd, lty=1, col=contrast_col)
+        abline(v=a, lwd=lwd, lty=lty, col=col)
+      } else{
+        abline(a, b, lwd=lwd, lty=1, col=contrast_col)
+        abline(a, b, lwd=lwd, lty=lty, col=col)
+      }
+    }
+    imar <- 0.02 # inner margin fudge, so highest payoff point doesn't get chopped off at the edge
+    plot_matrix(FPR, TPR, cost_matrix, # sub=sprintf("P=%0.2f", P_POS), 
+                xlim=c(-imar, 1 + imar), ylim=c(-imar, 1 + imar))
+    
+    safe_abline(0, 1, col="lightblue")
+    # lines of indifference for top right and bottom left corners
+    if (K==0){
+      safe_abline(1 - s(P_POS), s(P_POS), col="green")
+      safe_abline(0, s(P_POS), col="green")
+    }
+    
+    with(ROC_OBJ, {
+      fpr <- (1 - specificities)
+      tpr <- sensitivities
+      lines(fpr, tpr, col="blue", lwd=2)
+      utilities <- utility(fpr, tpr, P_POS, N)
+      max_point <- which.max(utilities)
+      points(fpr[max_point], tpr[max_point], bg="darkgreen", col="green", pch=21, cex=3)
+      mtext(sprintf("payoff = %0.2f", utilities[max_point]), side=3, line=2.5, cex=1.5)
+      mtext(sprintf("FPR = %0.2f, TPR = %0.2f", fpr[max_point], tpr[max_point]), side=3, line=1)
+    })
+
+  
+  }, width=600, height=600)
+}
+
+options <- list(width = 1000, height = 1000)
+
+shinyApp(ui, server,  options=options)
+
+```
+
