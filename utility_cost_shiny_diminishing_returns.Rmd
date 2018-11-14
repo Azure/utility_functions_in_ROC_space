@@ -22,9 +22,7 @@ if (file.exists(REFERENCE_ROC_FILE)){
   p <- seq(0, 1, length=300)
   ROC_OBJ <- list(
     p = p,
-    # sensitivities = pnorm(p, mean=0.25, sd=0.1), # mean=0.45, sd=0.09
-    # specificities = (1 - pnorm(p, mean=0.55, sd=0.2))
-    sensitivities = pnorm(p, mean=0.45, sd=0.1), # mean=0.45, sd=0.09
+    sensitivities = pnorm(p, mean=0.45, sd=0.1),
     specificities = (1 - pnorm(p, mean=0.54, sd=0.1))
   )
 }
@@ -97,12 +95,15 @@ server <- function(input, output) {
     
     utility <- function(fpr, tpr, P, N){
       # profit units
-      TP <- N * tpr * P
+      TP <- tpr * N * P
+      FP <- fpr * N * (1 - P)
+      TN <- (1 - fpr) * N * (1 - P)
+      FN <- (1 - tpr) * N * P
       equiv_TP <- diminishing_return(TP, K)
-      (TP_value * equiv_TP) +                # TP: sold
-      (FP_value * N * fpr * (1 - P)) +       # FP: refunded
-      (TN_value * N * (1 - fpr) * (1 - P)) + # TN: trashed
-      (FN_value * N * (1 - tpr) * P)         # FN: wasted
+      (TP_value * equiv_TP) + # TP: sold
+      (FP_value * FP) +       # FP: refunded
+      (TN_value * TN) +       # TN: trashed
+      (FN_value * FN)         # FN: wasted
     }
     
     s <- function(P){
